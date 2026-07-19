@@ -1,0 +1,116 @@
+{
+  "metadata": {
+    "geol": "29",
+    "title": "SpaceX Organizational Field Observation",
+    "version": "1.0",
+    "date": "2026-07-18",
+    "status": "Published",
+    "framework": "GOF-1.0"
+  },
+
+  "focus": {
+    "name": "SpaceX",
+    "type": "Organization",
+    "description": "Integrated aerospace engineering organization."
+  },
+
+  "lenses": [
+    {
+      "id": "structure",
+      "title": "Organizational Structure",
+      "description": "Persistent organizational units."
+    },
+    {
+      "id": "flow",
+      "title": "Organizational Flow",
+      "description": "Movement of resources, information, and work."
+    },
+    {
+      "id": "transformation",
+      "title": "Transformation",
+      "description": "Conversion of capabilities into organizational manifestations."
+    },
+    {
+      "id": "development",
+      "title": "Development",
+      "description": "Evolution of organizational capability over time."
+    }
+  ],
+
+  "constellations": [
+    {
+      "id": "structure",
+
+      "nodes": [
+
+        {
+          "id": "engineering",
+          "label": "Engineering",
+          "type": "Capability"
+        },
+
+        {
+          "id": "manufacturing",
+          "label": "Manufacturing",
+          "type": "Capability"
+        },
+
+        {
+          "id": "launch",
+          "label": "Launch Operations",
+          "type": "Capability"
+        },
+
+        {
+          "id": "mission",
+          "label": "Mission Operations",
+          "type": "Capability"
+        }
+
+      ],
+
+      "relations": [
+
+        {
+          "from": "engineering",
+          "to": "manufacturing",
+          "type": "supports"
+        },
+
+        {
+          "from": "manufacturing",
+          "to": "launch",
+          "type": "provides"
+        },
+
+        {
+          "from": "launch",
+          "to": "mission",
+          "type": "enables"
+        }
+
+      ]
+    }
+  ],
+
+  "observation": {
+
+    "purpose": "Observe the complete organizational field of SpaceX using calibrated Grand Eye mechanics.",
+
+    "boundary": "Persistent organizations and recurring organizational relationships within SpaceX.",
+
+    "questions": [
+
+      "What persistent organizational structures emerge?",
+
+      "How do capabilities relate to one another?",
+
+      "What recurring organizational patterns are observed?"
+
+    ],
+
+    "summary": "SpaceX reconstructs as an integrated organizational ecosystem whose persistent capabilities interact through recurring organizational relationships rather than isolated departments."
+
+  }
+
+}
