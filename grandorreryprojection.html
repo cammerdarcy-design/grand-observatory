@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grand Orrery Projection — focal-nodes instrument</title>
+<style>
+  :root {
+    --bg:#05070d; --ink:#dbe6ff; --dim:#8592b0; --panel:rgba(12,18,32,.82); --edge:#1d2a44;
+    --vs:#ff5d47; --s:#ff9d3c; --m:#ffd23c; --w:#46b6ff; --i:#34e0d0; --acc:#7fd6ff;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,sans-serif; }
+  #stage { position:fixed; inset:0; }
+  canvas { display:block; }
+  .labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+
+  /* ---- 3D labels (CSS2D) ------------------------------------------------ */
+  .lab { pointer-events:none; transform:translate(-50%,-50%); white-space:nowrap;
+    text-shadow:0 0 8px #000, 0 1px 2px #000; user-select:none; }
+  .lab.core { font-size:19px; font-weight:800; letter-spacing:.06em; color:#eaf3ff;
+    text-transform:uppercase; }
+  .lab.cons { font-size:12.5px; font-weight:700; letter-spacing:.02em; }
+  .lab.cons .cnt { font-weight:600; opacity:.6; font-size:11px; margin-left:5px; }
+  .lab.leaf { font-size:11px; font-weight:500; color:#c6d3ef; opacity:.92; }
+
+  /* ---- HUD panels ------------------------------------------------------- */
+  .hud { position:fixed; background:var(--panel); border:1px solid var(--edge); border-radius:12px;
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px); }
+  #top { left:20px; top:18px; padding:13px 17px; max-width:340px; }
+  #top h1 { margin:0; font-size:13px; letter-spacing:.22em; color:var(--acc); font-weight:700; }
+  #top .sub { margin-top:3px; font-size:11px; color:var(--dim); letter-spacing:.04em; }
+  #top .subj { margin-top:8px; font-size:20px; font-weight:800; color:#fff; line-height:1.1; }
+  #top .lensline { margin-top:2px; font-size:11.5px; color:var(--acc); }
+
+  #query { left:20px; bottom:20px; padding:13px 15px; width:360px; display:flex; flex-direction:column; gap:9px; }
+  #query .r { display:flex; gap:8px; align-items:center; }
+  #query label { font-size:10.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.09em; min-width:52px; }
+  input, select, button { font-family:inherit; }
+  #subject { flex:1; background:#0a0f1c; color:var(--ink); border:1px solid #26365a; border-radius:8px;
+    padding:9px 11px; font-size:14px; }
+  #subject:focus { outline:none; border-color:var(--acc); box-shadow:0 0 0 2px rgba(127,214,255,.18); }
+  select, #apikey { background:#0a0f1c; color:var(--ink); border:1px solid #26365a; border-radius:8px;
+    padding:8px 9px; font-size:12.5px; flex:1; }
+  button { cursor:pointer; border:1px solid #2a3c5f; background:#16213a; color:var(--ink);
+    border-radius:8px; padding:9px 13px; font-size:13px; }
+  button.go { background:linear-gradient(180deg,#2ea6ff,#1f7fe0); border-color:#2ea6ff; color:#04121f; font-weight:800; }
+  button.go:hover { filter:brightness(1.08); }
+  button.mini { padding:6px 10px; font-size:11.5px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { cursor:pointer; font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid #2a3c5f;
+    background:#111a2e; color:#b9c6e6; }
+  .chip:hover { border-color:var(--acc); color:#fff; }
+  .llmrow { display:none; gap:8px; }
+  .llmrow.on { display:flex; }
+  .note { font-size:10px; color:#6b93b8; line-height:1.4; display:none; }
+  .note.on { display:block; }
+
+  #legend { right:20px; bottom:20px; padding:12px 15px; font-size:11.5px; }
+  #legend .lt { color:var(--dim); text-transform:uppercase; letter-spacing:.1em; font-size:10px; margin-bottom:8px; }
+  #legend .row { display:flex; align-items:center; gap:9px; margin:5px 0; }
+  #legend .sw { width:22px; height:3px; border-radius:2px; }
+  #legend .sw.d { height:0; border-top:2px dashed var(--i); }
+
+  #metrics { right:20px; top:18px; padding:12px 15px; font-size:11.5px; min-width:186px; }
+  #metrics .lt { color:var(--dim); text-transform:uppercase; letter-spacing:.1em; font-size:10px; margin-bottom:8px; }
+  #metrics .row { display:flex; justify-content:space-between; gap:14px; margin:4px 0; }
+  #metrics .row b { color:#fff; font-variant-numeric:tabular-nums; }
+  #metrics .prov { margin-top:8px; padding-top:7px; border-top:1px solid var(--edge); color:var(--acc); font-size:11px; }
+  #metrics .fb { color:var(--s); }
+
+  #detail { right:20px; top:50%; transform:translateY(-50%); width:290px; padding:16px 18px;
+    display:none; max-height:70vh; overflow:auto; }
+  #detail.on { display:block; }
+  #detail .k { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); }
+  #detail h2 { margin:4px 0 3px; font-size:18px; color:#fff; }
+  #detail .badge { display:inline-block; font-size:10.5px; padding:2px 9px; border-radius:20px; font-weight:700;
+    color:#04121f; margin-bottom:8px; }
+  #detail p { margin:8px 0 0; font-size:13px; line-height:1.5; color:#c6d3ef; }
+  #detail .leaves { margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+  #detail .leaf { display:flex; align-items:center; gap:8px; font-size:12.5px; padding:6px 9px; border-radius:8px;
+    background:#0c1424; border:1px solid #1a2740; cursor:pointer; }
+  #detail .leaf:hover { border-color:var(--acc); }
+  #detail .leaf .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  #detail .close { position:absolute; right:12px; top:11px; cursor:pointer; color:var(--dim); font-size:16px; }
+  #detail .close:hover { color:#fff; }
+
+  #tip { position:fixed; pointer-events:none; background:rgba(8,12,22,.94); border:1px solid var(--edge);
+    border-radius:8px; padding:7px 11px; font-size:12px; max-width:240px; display:none; z-index:9;
+    box-shadow:0 6px 24px rgba(0,0,0,.5); }
+  #tip .t { font-weight:700; color:#fff; } #tip .d { color:var(--dim); font-size:11px; margin-top:2px; }
+
+  #spinbtn { position:fixed; right:20px; top:140px; }
+  #status { position:fixed; left:50%; top:16px; transform:translateX(-50%); font-size:12px; color:var(--acc);
+    background:var(--panel); border:1px solid var(--edge); border-radius:20px; padding:6px 15px; display:none; }
+  #status.on { display:block; }
+  a { color:var(--acc); }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script>
+  // Standalone safety net: if the ES-module below never boots (no internet / the
+  // three.js CDN is blocked), tell the viewer instead of showing a blank screen.
+  window.addEventListener('DOMContentLoaded', () => {
+    window.__bootTimer = setTimeout(() => {
+      if (!window.__booted) {
+        const s = document.getElementById('status');
+        if (s) { s.textContent = 'Could not load the 3D library (three.js) — check your internet connection and reload.'; s.classList.add('on'); }
+      }
+    }, 9000);
+  });
+</script>
+</head>
+<body>
+  <div id="stage"></div>
+  <div class="labels" id="labels"></div>
+
+  <div class="hud" id="top">
+    <h1>GRAND ORRERY PROJECTION</h1>
+    <div class="sub">focal-nodes instrument · GEOL-12</div>
+    <div class="subj" id="subjName">—</div>
+    <div class="lensline" id="lensLine">—</div>
+  </div>
+
+  <div class="hud" id="metrics">
+    <div class="lt">Network metrics</div>
+    <div class="row"><span>Constellations</span><b id="mC">0</b></div>
+    <div class="row"><span>Leaf nodes</span><b id="mL">0</b></div>
+    <div class="row"><span>Total nodes</span><b id="mN">0</b></div>
+    <div class="row"><span>Density</span><b id="mD">0</b></div>
+    <div class="prov" id="mProv">provider: —</div>
+  </div>
+
+  <div class="hud" id="legend">
+    <div class="lt">Relation strength</div>
+    <div class="row"><span class="sw" style="background:var(--vs)"></span>Very strong</div>
+    <div class="row"><span class="sw" style="background:var(--s)"></span>Strong</div>
+    <div class="row"><span class="sw" style="background:var(--m)"></span>Moderate</div>
+    <div class="row"><span class="sw" style="background:var(--w)"></span>Weak</div>
+    <div class="row"><span class="sw d"></span>Informational</div>
+  </div>
+
+  <button class="hud mini" id="spinbtn">⟲ spin: on</button>
+  <div id="status"></div>
+
+  <div class="hud" id="detail">
+    <span class="close" id="detClose">✕</span>
+    <div class="k" id="detKind">Constellation</div>
+    <h2 id="detName">—</h2>
+    <span class="badge" id="detBadge">—</span>
+    <p id="detText">—</p>
+    <div class="leaves" id="detLeaves"></div>
+  </div>
+
+  <div class="hud" id="query">
+    <div class="r">
+      <label for="subject">Focal</label>
+      <input id="subject" placeholder="name an object — real or construct…" value="SpaceX" />
+    </div>
+    <div class="r">
+      <label for="lens">Lens</label>
+      <select id="lens"></select>
+      <button class="go" id="project">Project ⟶</button>
+    </div>
+    <div class="r">
+      <label for="provider">Nodes</label>
+      <select id="provider">
+        <option value="stub">offline · deterministic</option>
+        <option value="llm">LLM · live query</option>
+      </select>
+    </div>
+    <div class="r llmrow" id="llmRow">
+      <input id="apikey" type="password" placeholder="Anthropic API key (stored locally)" />
+      <select id="model">
+        <option value="claude-opus-4-8">Opus 4.8</option>
+        <option value="claude-sonnet-5">Sonnet 5</option>
+        <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+      </select>
+    </div>
+    <div class="note" id="llmNote">Key is kept in your browser (localStorage) and sent straight to
+      api.anthropic.com from this page. Personal/local use only — don't ship a page with a real key in it.</div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div id="tip"><div class="t"></div><div class="d"></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+// ===================== inlined: prng.js =====================
+// Seeded PRNG. Determinism rule: same seed -> identical room, every run.
+// No Math.random() anywhere in the solver; every "random" choice draws from here.
+// mulberry32 - tiny, fast, good enough for scatter/slack resolution.
+
+function makeRng(seed) {
+  let a = (seed >>> 0) || 1; // 0 is a degenerate state, nudge to 1
+  return function next() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Convenience helpers built on a makeRng() function.
+function rngRange(rng, min, max) {
+  return min + (max - min) * rng();
+}
+
+function rngInt(rng, min, maxInclusive) {
+  return min + Math.floor(rng() * (maxInclusive - min + 1));
+}
+
+// ============== inlined: focal-projection.js ================
+// focal-projection.js — the GRAND ORRERY PROJECTION engine.
+// =============================================================================
+//  A minimal-query instrument: name a focal SUBJECT (real or construct), pick a
+//  LENS (the "type of information" at query time), and the engine spawns the
+//  outer NODES around it — a ring of CONSTELLATIONS (major facets), each holding
+//  a cluster of LEAF nodes, wired to the focal core by a colour-coded RELATION
+//  STRENGTH. That is the whole shape in the reference plate: SpaceX in the middle,
+//  its ecosystem-of-ecosystems fanned out around it.
+//
+//  THE DISCIPLINE (same as the rest of this engine):
+//   · Deterministic, no dice in resolution. The only randomness is world-gen —
+//     a seeded mulberry32 (prng.js) keyed off hash(subject|lens|seed). Same query
+//     ⇒ byte-identical graph, every run. No Math.random() anywhere.
+//   · Renderer-agnostic. This file emits coordinates-free TAGS + relations; the
+//     Three.js harness (test-focal-projection.html) only ever READS this output
+//     and decides where to hang it in space. Zero three.js in here.
+//   · ONE provider seam (mirrors shadowrun-designer.js setThemeProvider). The
+//     default provider is the DETERMINISTIC OFFLINE STUB below — it gives the
+//     STRUCTURE (which constellations, how strong, how many leaves). A real LLM
+//     is a one-line setProjectionProvider() swap that returns the SAME closed
+//     shape and assigns the MEANING (the real, named specifics). No model in the
+//     default path, in tests, or in headless runs.
+//   · Closed-shape validation. An off-shape provider result is rejected and the
+//     provider retried; after K misses it falls back to the stub, LOUDLY marked
+//     (result.fallback), so the renderer is never handed nothing.
+// =============================================================================
+
+// ---- the closed vocabulary --------------------------------------------------
+//  Relation strength = the reference legend, strongest→faintest. The renderer
+//  maps these to the red→orange→yellow→blue→dashed-teal ramp.
+const STRENGTHS = ['very-strong', 'strong', 'moderate', 'weak', 'informational'];
+const STRENGTH_RANK = { 'very-strong': 4, strong: 3, moderate: 2, weak: 1, informational: 0 };
+
+// A LENS is a way of looking. Each names its own set of facet ARCHETYPES — the
+// candidate constellations — plus, per facet, a small pool of leaf ASPECTS the
+// stub combines into bullet nodes. Labels stay generic on purpose: the offline
+// stub owns the SCAFFOLD; a real model renames these to the subject's specifics.
+const LENSES = {
+  overview: {
+    label: 'Overview', blurb: 'the ecosystem-of-ecosystems — how it is organised',
+    facets: [
+      { key: 'core', label: 'Core & Direction', hue: 0.55, aspects: ['mission', 'strategy', 'identity', 'mandate', 'stewardship', 'doctrine'] },
+      { key: 'programs', label: 'Programs & Products', hue: 0.33, aspects: ['flagship line', 'next generation', 'workhorse', 'moonshot', 'legacy line', 'skunkworks'] },
+      { key: 'components', label: 'Components', hue: 0.75, aspects: ['modules', 'subsystems', 'assemblies', 'building blocks', 'primitives', 'parts'] },
+      { key: 'operations', label: 'Operations', hue: 0.02, aspects: ['planning', 'execution', 'logistics', 'turnaround', 'ground support', 'recovery'] },
+      { key: 'people', label: 'People & Roles', hue: 0.13, aspects: ['operators', 'architects', 'specialists', 'leadership', 'stewards', 'apprentices'] },
+      { key: 'external', label: 'External Relations', hue: 0.62, aspects: ['regulators', 'suppliers', 'customers', 'partners', 'rivals', 'standards bodies'] },
+      { key: 'infra', label: 'Infrastructure', hue: 0.48, aspects: ['sites', 'facilities', 'networks', 'toolchains', 'supply', 'geography'] },
+      { key: 'resources', label: 'Resources', hue: 0.85, aspects: ['capital', 'materials', 'talent', 'knowledge', 'energy', 'time'] },
+      { key: 'risks', label: 'Risks & Bottlenecks', hue: 0.0, aspects: ['capacity', 'concentration', 'coordination load', 'talent pipeline', 'regulatory drag', 'single points'] },
+    ],
+  },
+  anatomy: {
+    label: 'Anatomy', blurb: 'the parts and how they fit — a structural breakdown',
+    facets: [
+      { key: 'structure', label: 'Structure', hue: 0.55, aspects: ['frame', 'skeleton', 'core', 'chassis', 'lattice', 'spine'] },
+      { key: 'parts', label: 'Parts', hue: 0.75, aspects: ['organs', 'members', 'segments', 'units', 'cells', 'nodes'] },
+      { key: 'materials', label: 'Materials', hue: 0.85, aspects: ['substrate', 'alloy', 'tissue', 'composite', 'medium', 'fabric'] },
+      { key: 'interfaces', label: 'Interfaces', hue: 0.33, aspects: ['joints', 'ports', 'membranes', 'seams', 'couplings', 'gateways'] },
+      { key: 'boundaries', label: 'Boundaries', hue: 0.62, aspects: ['surface', 'shell', 'perimeter', 'skin', 'edge', 'casing'] },
+      { key: 'interior', label: 'Interior', hue: 0.48, aspects: ['cavity', 'core', 'chambers', 'reservoir', 'matrix', 'depths'] },
+      { key: 'systems', label: 'Sub-systems', hue: 0.02, aspects: ['circulation', 'control', 'sensing', 'support', 'regulation', 'defence'] },
+    ],
+  },
+  history: {
+    label: 'History', blurb: 'origins, eras and turning points — the story over time',
+    facets: [
+      { key: 'origins', label: 'Origins', hue: 0.13, aspects: ['founding', 'first spark', 'precursors', 'seed idea', 'earliest form', 'genesis'] },
+      { key: 'milestones', label: 'Milestones', hue: 0.33, aspects: ['first success', 'breakthrough', 'expansion', 'peak', 'proof point', 'landmark'] },
+      { key: 'turns', label: 'Turning Points', hue: 0.0, aspects: ['crisis', 'pivot', 'reinvention', 'setback', 'reckoning', 'course change'] },
+      { key: 'influences', label: 'Influences', hue: 0.62, aspects: ['inspirations', 'rivals', 'mentors', 'movements', 'pressures', 'contemporaries'] },
+      { key: 'eras', label: 'Eras', hue: 0.55, aspects: ['early era', 'growth era', 'golden age', 'modern era', 'transition', 'present day'] },
+      { key: 'legacy', label: 'Legacy', hue: 0.85, aspects: ['descendants', 'lessons', 'monuments', 'imitators', 'lasting change', 'memory'] },
+    ],
+  },
+  network: {
+    label: 'Network', blurb: 'the web of relationships — who and what it touches',
+    facets: [
+      { key: 'allies', label: 'Allies', hue: 0.33, aspects: ['partners', 'sponsors', 'collaborators', 'kin', 'coalition', 'friends'] },
+      { key: 'rivals', label: 'Rivals', hue: 0.0, aspects: ['competitors', 'challengers', 'antagonists', 'insurgents', 'critics', 'foils'] },
+      { key: 'deps', label: 'Dependencies', hue: 0.02, aspects: ['upstream', 'suppliers', 'platforms', 'inputs', 'enablers', 'substrate'] },
+      { key: 'influence', label: 'Influence', hue: 0.13, aspects: ['downstream', 'audience', 'markets', 'imitators', 'reach', 'gravity'] },
+      { key: 'community', label: 'Community', hue: 0.62, aspects: ['members', 'contributors', 'fans', 'neighbours', 'cohort', 'diaspora'] },
+      { key: 'standards', label: 'Standards & Bodies', hue: 0.48, aspects: ['regulators', 'protocols', 'norms', 'guilds', 'registries', 'referees'] },
+    ],
+  },
+  systems: {
+    label: 'Systems', blurb: 'how it runs — inputs, processes, outputs and feedback',
+    facets: [
+      { key: 'inputs', label: 'Inputs', hue: 0.33, aspects: ['raw materials', 'signals', 'demand', 'energy', 'requests', 'seed data'] },
+      { key: 'process', label: 'Processes', hue: 0.55, aspects: ['transformation', 'assembly', 'routing', 'refinement', 'orchestration', 'synthesis'] },
+      { key: 'outputs', label: 'Outputs', hue: 0.33, aspects: ['products', 'results', 'emissions', 'services', 'artefacts', 'yield'] },
+      { key: 'feedback', label: 'Feedback', hue: 0.62, aspects: ['telemetry', 'metrics', 'corrections', 'learning', 'reviews', 'tuning'] },
+      { key: 'controls', label: 'Controls', hue: 0.48, aspects: ['governance', 'limits', 'gates', 'policies', 'throttles', 'safeguards'] },
+      { key: 'failure', label: 'Failure Modes', hue: 0.0, aspects: ['bottlenecks', 'faults', 'overload', 'drift', 'decay', 'single points'] },
+    ],
+  },
+};
+
+const DEFAULT_LENS = 'overview';
+function lensKeys() { return Object.keys(LENSES); }
+
+// ---- seeding: a stable 32-bit hash of the query so the same query replays -----
+function hashStr(s) {
+  let h = 0x811c9dc5; // FNV-1a
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+function normSubject(s) { return String(s == null ? '' : s).trim().replace(/\s+/g, ' '); }
+function slug(s) { return normSubject(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x'; }
+
+// ---- the provider seam (shadowrun-designer.js setThemeProvider pattern) -------
+//  A provider is (ctx, rng) => projection-graph, sync OR async. Swapping clears
+//  the cache. Default = the deterministic offline stub. A real LLM sets a fn with
+//  a .providerName and returns the SAME shape validateProjection() accepts.
+let PROVIDER = stubProvider;
+function setProjectionProvider(fn) { PROVIDER = typeof fn === 'function' ? fn : stubProvider; CACHE.clear(); }
+function getProjectionProviderName() {
+  return PROVIDER === stubProvider ? 'stub (offline, deterministic)' : (PROVIDER.providerName || 'custom');
+}
+
+// ---- the DETERMINISTIC offline stub (the default provider) --------------------
+//  Picks a subset of the lens's facet archetypes, ranks their relation strength,
+//  and fills each with 3–6 leaf nodes drawn from the facet's aspect pool. This is
+//  the SCAFFOLD — coherent and good-looking for ANY subject, real or invented —
+//  onto which a real model would later stamp named specifics. KNOWN subjects
+//  (below) short-circuit to hand-authored constellations so the demo reproduces
+//  the reference plate exactly.
+function stubProvider(ctx, rng) {
+  const authored = KNOWN[slug(ctx.subject)];
+  if (authored && authored[ctx.lens]) return authoredGraph(ctx, authored[ctx.lens]);
+
+  const facets = ctx.lensDef.facets;
+  const n = Math.min(facets.length, rngInt(rng, 6, Math.min(8, facets.length)));
+  const chosen = pickN(facets, n, rng);
+  // Strengths: the first (most core) facet anchors very-strong, the rest spread
+  // deterministically down the ramp so the plate reads with a clear hierarchy.
+  const strengthPlan = planStrengths(n, rng);
+  const constellations = chosen.map((f, i) => {
+    const leafN = rngInt(rng, 3, 6);
+    const aspects = pickN(f.aspects, Math.min(leafN, f.aspects.length), rng);
+    const nodes = aspects.map((a, j) => ({
+      id: `${f.key}-${j}`,
+      label: titleCase(a),
+      detail: `${cap(ctx.subject)} — ${a} (${f.label.toLowerCase()}).`,
+      strength: leafStrengthFor(strengthPlan[i], j),
+    }));
+    return {
+      id: f.key, label: f.label, kind: f.key, hue: f.hue,
+      strength: strengthPlan[i],
+      summary: `${cap(ctx.subject)} viewed as ${f.label.toLowerCase()}.`,
+      nodes,
+    };
+  });
+  return baseGraph(ctx, constellations);
+}
+stubProvider.providerName = 'stub';
+
+function authoredGraph(ctx, spec) {
+  const constellations = spec.constellations.map((c) => ({
+    id: c.id, label: c.label, kind: c.id, hue: c.hue,
+    strength: c.strength,
+    summary: c.summary || `${cap(ctx.subject)} — ${c.label}.`,
+    nodes: c.nodes.map((n, j) => (typeof n === 'string'
+      ? { id: `${c.id}-${j}`, label: n, detail: `${c.label}: ${n}.`, strength: c.leafStrength || 'moderate' }
+      : { id: `${c.id}-${j}`, label: n.label, detail: n.detail || `${c.label}: ${n.label}.`, strength: n.strength || c.leafStrength || 'moderate' })),
+  }));
+  return baseGraph(ctx, constellations, spec.meta);
+}
+
+function baseGraph(ctx, constellations, meta) {
+  return {
+    subject: cap(ctx.subject), lens: ctx.lens, lensLabel: ctx.lensDef.label,
+    seed: ctx.seed, constellations,
+    meta: meta || { note: ctx.lensDef.blurb },
+  };
+}
+
+// deterministic helpers ------------------------------------------------------
+function pickN(arr, n, rng) {
+  const pool = arr.slice(), out = [];
+  n = Math.max(0, Math.min(n, pool.length));
+  for (let i = 0; i < n; i++) out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  return out;
+}
+// A leaf sits one step below its constellation on the ramp, tapering gently so a
+// cluster reads as a hierarchy, floored at 'informational'. Deterministic (no rng
+// needed): STRENGTHS is strongest-first, so strength = STRENGTHS[4 - rank].
+function leafStrengthFor(parentStrength, j) {
+  const rank = Math.max(0, STRENGTH_RANK[parentStrength] - 1 - (j % 2));
+  return STRENGTHS[4 - rank];
+}
+function planStrengths(n, rng) {
+  // A pleasing hierarchy: one very-strong anchor, a couple strong, the tail
+  // moderate/weak, and (if room) one informational — jittered but deterministic.
+  const plan = [];
+  for (let i = 0; i < n; i++) {
+    let s;
+    if (i === 0) s = 'very-strong';
+    else if (i <= 2) s = rng() < 0.6 ? 'strong' : 'moderate';
+    else if (i === n - 1 && n >= 6) s = rng() < 0.5 ? 'informational' : 'weak';
+    else s = rng() < 0.5 ? 'moderate' : 'weak';
+    plan.push(s);
+  }
+  return plan;
+}
+function cap(s) { s = normSubject(s); return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function titleCase(s) { return String(s).replace(/\b\w/g, (c) => c.toUpperCase()); }
+
+// ---- closed-shape validation -------------------------------------------------
+function validateProjection(p) {
+  const errs = [];
+  if (!p || typeof p !== 'object') return { ok: false, errors: ['not an object'] };
+  if (!normSubject(p.subject)) errs.push('missing subject');
+  if (!Array.isArray(p.constellations) || p.constellations.length === 0) errs.push('no constellations');
+  const seen = new Set();
+  (p.constellations || []).forEach((c, i) => {
+    if (!c || typeof c !== 'object') { errs.push(`constellation[${i}] not an object`); return; }
+    if (!c.id || seen.has(c.id)) errs.push(`constellation[${i}] bad/duplicate id`); else seen.add(c.id);
+    if (!c.label) errs.push(`constellation[${i}] missing label`);
+    if (!STRENGTHS.includes(c.strength)) errs.push(`constellation[${i}] off-menu strength "${c.strength}"`);
+    if (!Array.isArray(c.nodes) || c.nodes.length === 0) errs.push(`constellation[${i}] no leaf nodes`);
+    (c.nodes || []).forEach((nd, j) => {
+      if (!nd || !nd.label) errs.push(`constellation[${i}].node[${j}] missing label`);
+      if (nd && nd.strength && !STRENGTHS.includes(nd.strength)) errs.push(`constellation[${i}].node[${j}] off-menu strength`);
+    });
+  });
+  return { ok: errs.length === 0, errors: errs };
+}
+
+// ---- the ONE query entry point ----------------------------------------------
+//  project({ subject, lens, seed }) → a validated projection graph.
+//  Async: the stub is sync, a real LLM provider is a Promise; we await either.
+//  Off-shape ⇒ retry the provider (RETRIES), then fall back to the stub LOUDLY.
+const CACHE = new Map();
+const RETRIES = 2;
+
+async function project(query = {}) {
+  const subject = normSubject(query.subject) || 'Unknown';
+  const lens = LENSES[query.lens] ? query.lens : DEFAULT_LENS;
+  const lensDef = LENSES[lens];
+  const seed = Number.isFinite(query.seed) ? (query.seed >>> 0) : hashStr(`${slug(subject)}|${lens}`);
+  const cacheKey = `${slug(subject)}|${lens}|${seed}|${getProjectionProviderName()}`;
+  if (CACHE.has(cacheKey)) return CACHE.get(cacheKey);
+
+  const ctx = { subject, lens, lensDef, seed, STRENGTHS, LENSES };
+  let graph = null, fallback = false, lastErr = null;
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
+    const rng = makeRng(seed + attempt); // fresh, deterministic stream per attempt
+    try {
+      const out = await PROVIDER(ctx, rng);
+      const v = validateProjection(out);
+      if (v.ok) { graph = out; break; }
+      lastErr = v.errors;
+    } catch (e) { lastErr = [String(e && e.message || e)]; }
+  }
+  if (!graph) {
+    // LOUD fallback — never hand the renderer nothing.
+    console.warn('[focal-projection] provider off-shape, falling back to stub:', lastErr);
+    graph = stubProvider(ctx, makeRng(seed));
+    fallback = true;
+  }
+  const result = {
+    ...graph, subject: cap(subject), lens, lensLabel: lensDef.label, seed,
+    provider: getProjectionProviderName(), fallback,
+    metrics: computeMetrics(graph),
+  };
+  CACHE.set(cacheKey, result);
+  return result;
+}
+
+function clearProjectionCache() { CACHE.clear(); }
+
+// Derived read-outs for the instrument's side panels (echoes the plate's HUD).
+function computeMetrics(graph) {
+  const cons = graph.constellations || [];
+  const leaves = cons.reduce((a, c) => a + (c.nodes ? c.nodes.length : 0), 0);
+  const byStrength = {};
+  STRENGTHS.forEach((s) => (byStrength[s] = 0));
+  cons.forEach((c) => { byStrength[c.strength] = (byStrength[c.strength] || 0) + 1; });
+  const density = cons.length ? +(leaves / cons.length).toFixed(2) : 0;
+  return { constellations: cons.length, leaves, nodes: cons.length + leaves + 1, byStrength, density };
+}
+
+// ---- an OPTIONAL real-LLM provider factory (the one-line swap) ----------------
+//  makeLlmProvider({ apiKey, model, fetchImpl, endpoint }) → a provider fn that
+//  asks a model for the SAME closed shape and returns it. It is NOT wired in by
+//  default — the renderer offers a toggle, the tests inject a fake fetchImpl so
+//  the parse/validate path is exercised with NO network and NO model. This keeps
+//  "no model in the default path" true while making the LLM a genuine one-liner:
+//     setProjectionProvider(makeLlmProvider({ apiKey, model }))
+function projectionSchemaHint() {
+  return {
+    subject: 'string', lens: 'one of ' + lensKeys().join('|'),
+    constellations: [{
+      id: 'kebab-id', label: 'short title', hue: '0..1 colour family',
+      strength: STRENGTHS.join('|'), summary: 'one line',
+      nodes: [{ label: 'short bullet', detail: 'one sentence', strength: STRENGTHS.join('|') }],
+    }],
+  };
+}
+
+function buildLlmMessages(ctx) {
+  const sys = 'You are the GRAND ORRERY PROJECTION instrument. Given a focal SUBJECT and a LENS, '
+    + 'return ONLY JSON matching the schema — 6 to 8 constellations (major facets of the subject seen '
+    + 'through the lens), each with a relation `strength` to the core and 3–6 leaf `nodes`. Be specific '
+    + 'and factual where the subject is real; be coherent and evocative where it is a construct. '
+    + 'strength ∈ ' + STRENGTHS.join(', ') + '. hue ∈ [0,1]. No prose outside the JSON.';
+  const user = `SUBJECT: ${ctx.subject}\nLENS: ${ctx.lens} — ${ctx.lensDef.label} (${ctx.lensDef.blurb})\n`
+    + `SCHEMA: ${JSON.stringify(projectionSchemaHint())}`;
+  return { system: sys, user };
+}
+
+// Parse a model's text into a projection graph (tolerant of ```json fences).
+function parseLlmGraph(text, ctx) {
+  let s = String(text || '').trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const start = s.indexOf('{'), end = s.lastIndexOf('}');
+  if (start >= 0 && end > start) s = s.slice(start, end + 1);
+  const raw = JSON.parse(s);
+  // Normalise into baseGraph shape; validateProjection() is the gate after this.
+  const constellations = (raw.constellations || []).map((c, i) => ({
+    id: slug(c.id || c.label || `c${i}`), label: c.label || c.id || `Facet ${i + 1}`,
+    kind: slug(c.id || c.label || `c${i}`), hue: Number.isFinite(c.hue) ? c.hue : (i / Math.max(1, (raw.constellations || []).length)),
+    strength: STRENGTHS.includes(c.strength) ? c.strength : 'moderate',
+    summary: c.summary || `${cap(ctx.subject)} — ${c.label || ''}`.trim(),
+    nodes: (c.nodes || []).map((n, j) => ({
+      id: `${slug(c.id || c.label || `c${i}`)}-${j}`,
+      label: typeof n === 'string' ? n : (n.label || `node ${j}`),
+      detail: typeof n === 'string' ? '' : (n.detail || ''),
+      strength: (n && STRENGTHS.includes(n.strength)) ? n.strength : (c.strength || 'moderate'),
+    })),
+  }));
+  return baseGraph(ctx, constellations);
+}
+
+function makeLlmProvider({ apiKey, model = 'claude-opus-4-8', fetchImpl, endpoint = 'https://api.anthropic.com/v1/messages', maxTokens = 1600, browser = false } = {}) {
+  const doFetch = fetchImpl || (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null);
+  const provider = async (ctx) => {
+    if (!doFetch) throw new Error('no fetch available');
+    const { system, user } = buildLlmMessages(ctx);
+    const headers = { 'content-type': 'application/json', 'x-api-key': apiKey || '', 'anthropic-version': '2023-06-01' };
+    if (browser) headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    const res = await doFetch(endpoint, {
+      method: 'POST', headers,
+      body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+    });
+    if (!res.ok) throw new Error(`llm http ${res.status}`);
+    const data = await res.json();
+    const text = Array.isArray(data.content) ? data.content.map((b) => b.text || '').join('') : (data.text || '');
+    return parseLlmGraph(text, ctx);
+  };
+  provider.providerName = `llm:${model}`;
+  return provider;
+}
+
+// ---- hand-authored KNOWN subjects (the wow-factor / reference plate) ----------
+//  Keyed by slug(subject). Reproduces the SpaceX ecosystem-of-ecosystems from the
+//  reference image so `project({subject:'SpaceX'})` lands the real thing, and a
+//  couple more to show the instrument works across very different objects.
+const KNOWN = {
+  spacex: {
+    overview: {
+      meta: { note: 'GEOL-12 · ecosystem-of-ecosystems — the same language observes at every scale' },
+      constellations: [
+        { id: 'vehicle-programs', label: 'Vehicle & Programs', hue: 0.33, strength: 'very-strong', leafStrength: 'strong',
+          summary: 'The flight hardware lines and the missions they fly.',
+          nodes: ['Starship Program', 'Falcon Program', 'Dragon Program', 'Reusability', 'Flight Test', 'Future Missions'] },
+        { id: 'engineering', label: 'Engineering', hue: 0.5, strength: 'very-strong', leafStrength: 'strong',
+          summary: 'The disciplines that design the vehicles.',
+          nodes: ['Propulsion (Raptor)', 'Structures', 'Avionics', 'Software', 'Systems Engineering', 'Thermal', 'Flight Safety'] },
+        { id: 'manufacturing', label: 'Manufacturing', hue: 0.45, strength: 'strong', leafStrength: 'moderate',
+          summary: 'Turning designs into vehicles at rate.',
+          nodes: ['Vehicle Production', 'Components', 'Factories (TX, CA)', 'Tooling', 'Quality & Inspection'] },
+        { id: 'launch-ops', label: 'Launch Operations', hue: 0.02, strength: 'strong', leafStrength: 'moderate',
+          summary: 'Getting a stacked vehicle off the pad and back.',
+          nodes: ['Range Operations', 'Pad Infrastructure', 'Launch Control', 'Recovery Ops', 'Turnaround'] },
+        { id: 'mission-ops', label: 'Mission Operations', hue: 0.78, strength: 'strong', leafStrength: 'moderate',
+          summary: 'Flying the mission once it is aloft.',
+          nodes: ['Mission Planning', 'Telemetry', 'Tracking', 'Ground Networks', 'Data Operations'] },
+        { id: 'supply', label: 'Industrial & Supply', hue: 0.75, strength: 'moderate', leafStrength: 'weak',
+          summary: 'The suppliers, chips and materials feeding the line.',
+          nodes: ['Global Suppliers', 'Semiconductors', 'Materials', 'Propellants', 'Machining & Fasteners'] },
+        { id: 'external', label: 'External Ecosystem', hue: 0.62, strength: 'moderate', leafStrength: 'informational',
+          summary: 'The government, customers and regulators around the company.',
+          nodes: ['NASA', 'U.S. Government', 'Regulatory (FAA)', 'Customers', 'Financial Markets'] },
+        { id: 'infra-geo', label: 'Infrastructure & Geography', hue: 0.55, strength: 'weak', leafStrength: 'weak',
+          summary: 'The physical sites the whole thing runs on.',
+          nodes: ['Starbase, TX', 'Kennedy (LC-39A)', 'Vandenberg', 'McGregor, TX', 'Hawthorne, CA'] },
+      ],
+    },
+  },
+  'the-internet': {
+    overview: {
+      meta: { note: 'a network of networks — observed as an ecosystem' },
+      constellations: [
+        { id: 'physical', label: 'Physical Layer', hue: 0.55, strength: 'very-strong', leafStrength: 'strong',
+          nodes: ['Fibre Backbones', 'Subsea Cables', 'Data Centres', 'Exchange Points', 'Last Mile'] },
+        { id: 'protocols', label: 'Protocols', hue: 0.5, strength: 'very-strong', leafStrength: 'strong',
+          nodes: ['TCP/IP', 'DNS', 'HTTP', 'BGP', 'TLS'] },
+        { id: 'services', label: 'Services', hue: 0.33, strength: 'strong', leafStrength: 'moderate',
+          nodes: ['The Web', 'Email', 'Streaming', 'Cloud', 'Messaging'] },
+        { id: 'governance', label: 'Governance', hue: 0.62, strength: 'moderate', leafStrength: 'weak',
+          nodes: ['ICANN', 'IETF', 'Registrars', 'Regulators', 'Standards'] },
+        { id: 'actors', label: 'Actors', hue: 0.13, strength: 'moderate', leafStrength: 'weak',
+          nodes: ['ISPs', 'Hyperscalers', 'CDNs', 'Users', 'Attackers'] },
+        { id: 'risks', label: 'Risks', hue: 0.0, strength: 'weak', leafStrength: 'informational',
+          nodes: ['Centralisation', 'Outages', 'Censorship', 'Congestion', 'Security'] },
+      ],
+    },
+  },
+  'the-human-body': {
+    anatomy: {
+      meta: { note: 'the body as a system of systems' },
+      constellations: [
+        { id: 'skeletal', label: 'Skeletal System', hue: 0.55, strength: 'very-strong', leafStrength: 'strong',
+          nodes: ['Skull', 'Spine', 'Ribcage', 'Limbs', 'Joints'] },
+        { id: 'muscular', label: 'Muscular System', hue: 0.0, strength: 'very-strong', leafStrength: 'strong',
+          nodes: ['Skeletal Muscle', 'Cardiac Muscle', 'Smooth Muscle', 'Tendons', 'Fascia'] },
+        { id: 'nervous', label: 'Nervous System', hue: 0.78, strength: 'very-strong', leafStrength: 'strong',
+          nodes: ['Brain', 'Spinal Cord', 'Nerves', 'Senses', 'Reflexes'] },
+        { id: 'circulatory', label: 'Circulatory System', hue: 0.02, strength: 'strong', leafStrength: 'moderate',
+          nodes: ['Heart', 'Arteries', 'Veins', 'Blood', 'Capillaries'] },
+        { id: 'respiratory', label: 'Respiratory System', hue: 0.5, strength: 'strong', leafStrength: 'moderate',
+          nodes: ['Lungs', 'Airway', 'Diaphragm', 'Gas Exchange'] },
+        { id: 'digestive', label: 'Digestive System', hue: 0.13, strength: 'moderate', leafStrength: 'weak',
+          nodes: ['Stomach', 'Intestines', 'Liver', 'Pancreas'] },
+        { id: 'organs', label: 'Boundaries', hue: 0.62, strength: 'weak', leafStrength: 'informational',
+          nodes: ['Skin', 'Immune Barrier', 'Membranes'] },
+      ],
+    },
+  },
+};
+
+function knownSubjects() { return Object.keys(KNOWN); }
+// ============ end inlined engine — renderer below ===========
+
+// ---- strength → colour / weight --------------------------------------------
+const SC = { 'very-strong':0xff5d47, strong:0xff9d3c, moderate:0xffd23c, weak:0x46b6ff, informational:0x34e0d0 };
+const SW = { 'very-strong':3.2, strong:2.4, moderate:1.7, weak:1.1, informational:0.7 };  // node scale
+const ST = { 'very-strong':0.34, strong:0.26, moderate:0.2, weak:0.14, informational:0.09 }; // tube radius
+const strengthLabel = (s) => s.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+// ---- three.js bootstrap -----------------------------------------------------
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x05070d, 0.0065);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 2000);
+const CAM_HOME = new THREE.Vector3(0, 14, 52);
+camera.position.copy(CAM_HOME);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0x05070d, 1);
+stage.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer({ element: document.getElementById('labels') });
+labelRenderer.setSize(innerWidth, innerHeight);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.95, 0.55, 0.12);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 12; controls.maxDistance = 140;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.32;
+controls.target.set(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0x2a3350, 1.1));
+const key = new THREE.PointLight(0x8fbaff, 260, 400); key.position.set(30, 40, 30); scene.add(key);
+scene.add(new THREE.PointLight(0xff8a5a, 90, 300).translateY(-20));
+
+// starfield -------------------------------------------------------------------
+(function stars() {
+  const N = 2600, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const r = 240 + Math.random() * 640, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+    pos[i*3] = r*Math.sin(ph)*Math.cos(th); pos[i*3+1] = r*Math.cos(ph)*0.7; pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+    c.setHSL(0.55 + Math.random()*0.12, 0.5, 0.6 + Math.random()*0.35);
+    col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.15, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false })));
+})();
+
+// the orrery pedestal — concentric glowing rings under the projection --------
+const base = new THREE.Group(); base.position.y = -16; scene.add(base);
+for (let i = 0; i < 4; i++) {
+  const rad = 12 + i * 7;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(rad, 0.06 + i*0.015, 8, 128),
+    new THREE.MeshBasicMaterial({ color: 0x2f6ea6, transparent: true, opacity: 0.5 - i*0.08 }));
+  ring.rotation.x = Math.PI / 2; base.add(ring);
+}
+const disc = new THREE.Mesh(new THREE.CircleGeometry(34, 96),
+  new THREE.MeshBasicMaterial({ color: 0x0a1830, transparent: true, opacity: 0.34, side: THREE.DoubleSide }));
+disc.rotation.x = -Math.PI / 2; base.add(disc);
+
+// ---- shared glow sprite texture --------------------------------------------
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.25, 'rgba(255,255,255,.55)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+function glow(color, size) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9 }));
+  s.scale.setScalar(size); return s;
+}
+function label(text, cls, cnt) {
+  const d = document.createElement('div'); d.className = 'lab ' + cls; d.textContent = text;
+  if (cnt != null) { const s = document.createElement('span'); s.className = 'cnt'; s.textContent = '· ' + cnt; d.appendChild(s); }
+  return new CSS2DObject(d);
+}
+
+// ---- the projection root (rebuilt per query) -------------------------------
+let root = new THREE.Group(); scene.add(root);
+const pickables = [];          // meshes the raycaster can hit
+let coreMesh = null;           // the focal object
+let constellations = [];       // { mesh, glow, connector, label, leaves:[...], data, basePos }
+let currentGraph = null;
+let focused = null;            // a constellation object or null
+
+// core --------------------------------------------------------------------
+function buildCore(graph) {
+  const grp = new THREE.Group();
+  const ico = new THREE.Mesh(new THREE.IcosahedronGeometry(2.3, 1),
+    new THREE.MeshStandardMaterial({ color: 0x9fdcff, emissive: 0x2e7fff, emissiveIntensity: 1.5, metalness: 0.4, roughness: 0.3 }));
+  grp.add(ico);
+  grp.add(new THREE.Mesh(new THREE.IcosahedronGeometry(3.0, 0),
+    new THREE.MeshBasicMaterial({ color: 0x6fc0ff, wireframe: true, transparent: true, opacity: 0.28 })));
+  for (let i = 0; i < 2; i++) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3.6 + i*0.5, 0.03, 8, 96),
+      new THREE.MeshBasicMaterial({ color: 0x7fd6ff, transparent: true, opacity: 0.4 }));
+    ring.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, 0); grp.add(ring);
+  }
+  grp.add(glow(0x4aa8ff, 16));
+  const lab = label(graph.subject, 'core'); lab.position.set(0, 4.4, 0); grp.add(lab);
+  ico.userData = { type: 'core' }; pickables.push(ico);
+  coreMesh = ico; root.add(grp); return grp;
+}
+
+// a curved connector core↔node, coloured by relation strength ----------------
+function connector(a, b, strength) {
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  mid.add(mid.clone().normalize().multiplyScalar(a.distanceTo(b) * 0.18));  // bow outward
+  mid.y += 1.2;
+  const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+  if (strength === 'informational') {
+    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(40));
+    const mat = new THREE.LineDashedMaterial({ color: SC[strength], transparent: true, opacity: 0.6, dashSize: 0.7, gapSize: 0.6 });
+    const line = new THREE.Line(geo, mat); line.computeLineDistances(); return line;
+  }
+  const geo = new THREE.TubeGeometry(curve, 44, ST[strength], 8, false);
+  const mat = new THREE.MeshBasicMaterial({ color: SC[strength], transparent: true, opacity: 0.82,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  return new THREE.Mesh(geo, mat);
+}
+
+// fibonacci sphere, flattened, biased slightly upward — the constellation dome
+function layout(n) {
+  const pts = [], R = 24, gold = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (i / Math.max(1, n - 1)) * 1.7;      // span top → lower-mid (dome, not full sphere)
+    const r = Math.sqrt(Math.max(0, 1 - y * y)), th = gold * i;
+    pts.push(new THREE.Vector3(Math.cos(th) * r * R, (y * 0.62 + 0.15) * R, Math.sin(th) * r * R));
+  }
+  return pts;
+}
+
+function buildScene(graph) {
+  // dispose old --------------------------------------------------------------
+  disposeGroup(root); scene.remove(root);
+  root = new THREE.Group(); scene.add(root);
+  pickables.length = 0; constellations = []; coreMesh = null; focused = null;
+  hovered = null; document.getElementById('tip').style.display = 'none';
+  currentGraph = graph;
+
+  buildCore(graph);
+  const positions = layout(graph.constellations.length);
+
+  graph.constellations.forEach((c, i) => {
+    const p = positions[i];
+    const hue = (c.hue == null ? (i / graph.constellations.length) : c.hue);
+    const col = new THREE.Color().setHSL(hue % 1, 0.68, 0.6);
+    const node = new THREE.Mesh(new THREE.IcosahedronGeometry(SW[c.strength] * 0.34 + 0.5, 1),
+      new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.15, metalness: 0.3, roughness: 0.35 }));
+    node.position.copy(p);
+    node.userData = { type: 'cons', ref: null };
+    const g = glow(col.getHex(), SW[c.strength] * 3.4);
+    node.add(g);
+    const conn = connector(new THREE.Vector3(0, 0, 0), p, c.strength);
+    const lab = label(c.label, 'cons', c.nodes.length); lab.position.copy(p).add(new THREE.Vector3(0, SW[c.strength] * 0.5 + 1.5, 0));
+
+    root.add(node); root.add(conn); node.add(lab);
+    pickables.push(node);
+
+    // leaf cluster (collapsed until this constellation is focused) -----------
+    const leaves = [];
+    const upAxis = p.clone().normalize();
+    const tangent = new THREE.Vector3().crossVectors(upAxis, new THREE.Vector3(0, 1, 0)).normalize();
+    if (tangent.lengthSq() < 0.01) tangent.set(1, 0, 0);
+    const bitan = new THREE.Vector3().crossVectors(upAxis, tangent).normalize();
+    c.nodes.forEach((leaf, j) => {
+      const ang = (j / c.nodes.length) * Math.PI * 2;
+      const rr = 4.6 + (c.nodes.length > 5 ? 1.2 : 0);
+      const off = tangent.clone().multiplyScalar(Math.cos(ang) * rr).add(bitan.clone().multiplyScalar(Math.sin(ang) * rr)).add(upAxis.clone().multiplyScalar(1.6));
+      const lp = p.clone().add(off);
+      const lcol = new THREE.Color(SC[leaf.strength] || SC.weak);
+      const lm = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 16),
+        new THREE.MeshStandardMaterial({ color: lcol, emissive: lcol, emissiveIntensity: 1.1, roughness: 0.4 }));
+      lm.position.copy(lp);
+      lm.add(glow(lcol.getHex(), 3.2));
+      const lconn = connector(p, lp, leaf.strength);
+      const llab = label(leaf.label, 'leaf'); llab.position.copy(lp).add(new THREE.Vector3(0, 1.0, 0));
+      lm.userData = { type: 'leaf', vis: 0, visTarget: 0, base: 1, hover: 0, data: leaf, parent: null };
+      lconn.userData = { leafOf: lm };
+      llab.userData = { leafLab: true };
+      lm.visible = false; lconn.visible = false; llab.visible = false;
+      root.add(lm); root.add(lconn); lm.add(llab);
+      pickables.push(lm);
+      leaves.push({ mesh: lm, conn: lconn, lab: llab, data: leaf });
+    });
+
+    const consObj = { mesh: node, glow: g, conn, lab, leaves, data: c, basePos: p, hue,
+      spawn: 0, spawnDelay: 0.05 + i * 0.06, hover: 0 };
+    node.userData.ref = consObj;
+    leaves.forEach((lf) => (lf.mesh.userData.parent = consObj));
+    constellations.push(consObj);
+  });
+
+  // spawn-in animation state
+  constellations.forEach((c) => { c.mesh.scale.setScalar(0.001); if (c.conn.material) c.conn.material.opacity = 0; });
+  spawnStart = clock.getElapsedTime();
+  updateHud(graph);
+  hideDetail(); flyHome(); controls.autoRotate = true; syncSpinBtn();
+}
+
+function disposeGroup(g) {
+  g.traverse((o) => {
+    if (o.isCSS2DObject && o.element && o.element.parentNode) o.element.parentNode.removeChild(o.element);
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+  });
+}
+
+// ---- focus / detail --------------------------------------------------------
+function setFocus(consObj) {
+  focused = consObj;
+  constellations.forEach((c) => {
+    const on = c === consObj;
+    c.leaves.forEach((lf) => {
+      lf.mesh.userData.visTarget = on ? 1 : 0;
+      if (on) { lf.mesh.visible = true; lf.conn.visible = true; lf.lab.visible = true; }
+    });
+    // dim the others
+    c.mesh.material.emissiveIntensity = (consObj && !on) ? 0.4 : 1.15;
+    if (c.conn.material) c.conn.material.opacity = (consObj && !on) ? 0.18 : (c.data.strength === 'informational' ? 0.6 : 0.82);
+    c.lab.element.style.opacity = (consObj && !on) ? 0.28 : 1;
+  });
+  if (consObj) { showDetailCons(consObj); flyTo(consObj.basePos); }
+  else { hideDetail(); flyHome(); }
+}
+
+function showDetailCons(c) {
+  const d = document.getElementById('detail');
+  document.getElementById('detKind').textContent = 'Constellation';
+  document.getElementById('detName').textContent = c.data.label;
+  const b = document.getElementById('detBadge');
+  b.textContent = strengthLabel(c.data.strength); b.style.background = '#' + SC[c.data.strength].toString(16).padStart(6, '0');
+  document.getElementById('detText').textContent = c.data.summary || '';
+  const box = document.getElementById('detLeaves'); box.innerHTML = '';
+  c.leaves.forEach((lf) => {
+    const el = document.createElement('div'); el.className = 'leaf';
+    const dot = document.createElement('span'); dot.className = 'dot';
+    dot.style.background = '#' + (SC[lf.data.strength] || SC.weak).toString(16).padStart(6, '0');
+    el.appendChild(dot); el.appendChild(document.createTextNode(lf.data.label));
+    el.onclick = () => showDetailLeaf(lf.data, c);
+    box.appendChild(el);
+  });
+  d.classList.add('on');
+}
+function showDetailLeaf(leaf, c) {
+  const d = document.getElementById('detail');
+  document.getElementById('detKind').textContent = c ? c.data.label : 'Node';
+  document.getElementById('detName').textContent = leaf.label;
+  const b = document.getElementById('detBadge');
+  b.textContent = strengthLabel(leaf.strength); b.style.background = '#' + (SC[leaf.strength] || SC.weak).toString(16).padStart(6, '0');
+  document.getElementById('detText').textContent = leaf.detail || '';
+  document.getElementById('detLeaves').innerHTML = '';
+  d.classList.add('on');
+}
+function hideDetail() { document.getElementById('detail').classList.remove('on'); }
+document.getElementById('detClose').onclick = () => setFocus(null);
+
+// ---- camera fly ------------------------------------------------------------
+let flyPos = null, flyTgt = null;
+function flyTo(nodePos) {
+  const outward = nodePos.clone().normalize();
+  flyTgt = nodePos.clone();
+  flyPos = nodePos.clone().add(outward.multiplyScalar(15)).add(new THREE.Vector3(0, 5, 0));
+  controls.autoRotate = false; syncSpinBtn();
+}
+function flyHome() { flyPos = CAM_HOME.clone(); flyTgt = new THREE.Vector3(0, 0, 0); }
+
+// ---- raycast: hover + click ------------------------------------------------
+const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
+let hovered = null;
+function pickAt(ev) {
+  pointer.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(pointer, camera);
+  const cand = pickables.filter((m) => m.userData.type !== 'leaf' || m.userData.vis > 0.4);
+  return ray.intersectObjects(cand, false)[0] || null;
+}
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  const hit = pickAt(ev);
+  const obj = hit ? hit.object : null;
+  if (obj !== hovered) {
+    if (hovered && hovered.userData.ref) hovered.userData.ref.hover = 0;
+    if (hovered && hovered.userData.type === 'leaf') hovered.userData.hover = 0;
+    hovered = obj;
+    if (obj && obj.userData.ref) obj.userData.ref.hover = 1;
+    if (obj && obj.userData.type === 'leaf') obj.userData.hover = 1;
+    document.body.style.cursor = obj ? 'pointer' : 'default';
+  }
+  const tip = document.getElementById('tip');
+  if (obj && obj.userData.type !== 'core') {
+    const data = obj.userData.ref ? obj.userData.ref.data : obj.userData.data;
+    tip.querySelector('.t').textContent = data.label;
+    tip.querySelector('.d').textContent = (obj.userData.ref ? data.summary : data.detail) || strengthLabel(data.strength);
+    tip.style.display = 'block';
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 250) + 'px';
+    tip.style.top = (ev.clientY + 14) + 'px';
+  } else tip.style.display = 'none';
+});
+renderer.domElement.addEventListener('pointerdown', (ev) => { downXY = [ev.clientX, ev.clientY]; });
+let downXY = [0, 0];
+renderer.domElement.addEventListener('pointerup', (ev) => {
+  if (Math.hypot(ev.clientX - downXY[0], ev.clientY - downXY[1]) > 6) return;  // a drag, not a click
+  const hit = pickAt(ev);
+  if (!hit) { setFocus(null); return; }
+  const u = hit.object.userData;
+  if (u.type === 'core') setFocus(null);
+  else if (u.type === 'cons') setFocus(u.ref === focused ? null : u.ref);
+  else if (u.type === 'leaf') showDetailLeaf(u.data, u.parent);
+});
+
+// ---- query flow ------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+function status(msg) { const s = $('status'); if (!msg) { s.classList.remove('on'); return; } s.textContent = msg; s.classList.add('on'); }
+
+function wireProvider() {
+  const mode = $('provider').value;
+  const on = mode === 'llm';
+  $('llmRow').classList.toggle('on', on); $('llmNote').classList.toggle('on', on);
+  if (on) {
+    const apiKey = $('apikey').value.trim();
+    localStorage.setItem('focal.key', apiKey);
+    setProjectionProvider(makeLlmProvider({ apiKey, model: $('model').value, browser: true }));
+  } else setProjectionProvider(null);
+}
+
+async function runQuery() {
+  wireProvider();
+  const subject = $('subject').value.trim() || 'Unknown';
+  const lens = $('lens').value;
+  status('projecting “' + subject + '” …');
+  try {
+    const graph = await project({ subject, lens });
+    buildScene(graph);
+    if (graph.fallback && $('provider').value === 'llm') status('LLM response was off-shape — showed the offline scaffold instead.');
+    else status('');
+    setTimeout(() => status(''), graph.fallback ? 3200 : 900);
+  } catch (e) {
+    console.error(e); status('projection failed: ' + (e.message || e));
+    setTimeout(() => status(''), 3500);
+  }
+}
+
+function updateHud(graph) {
+  $('subjName').textContent = graph.subject;
+  $('lensLine').textContent = (graph.lensLabel || graph.lens) + ' lens';
+  const m = graph.metrics || {};
+  $('mC').textContent = m.constellations ?? graph.constellations.length;
+  $('mL').textContent = m.leaves ?? '';
+  $('mN').textContent = m.nodes ?? '';
+  $('mD').textContent = m.density ?? '';
+  const prov = $('mProv'); prov.textContent = 'provider: ' + (graph.provider || '—');
+  prov.classList.toggle('fb', !!graph.fallback);
+}
+
+// populate lens + provider + chips
+(function initUI() {
+  const lensSel = $('lens');
+  lensKeys().forEach((k) => { const o = document.createElement('option'); o.value = k; o.textContent = LENSES[k].label; lensSel.appendChild(o); });
+  const chips = $('chips');
+  ['SpaceX', 'The Internet', 'The Human Body', 'Ancient Rome', 'A Coral Reef'].forEach((s) => {
+    const c = document.createElement('div'); c.className = 'chip'; c.textContent = s;
+    c.onclick = () => { $('subject').value = s; if (knownSubjects().includes(s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))) $('lens').value = (s.toLowerCase().includes('body') ? 'anatomy' : 'overview'); runQuery(); };
+    chips.appendChild(c);
+  });
+  $('apikey').value = localStorage.getItem('focal.key') || '';
+  $('provider').onchange = () => { $('llmRow').classList.toggle('on', $('provider').value === 'llm'); $('llmNote').classList.toggle('on', $('provider').value === 'llm'); };
+  $('project').onclick = runQuery;
+  $('subject').addEventListener('keydown', (e) => { if (e.key === 'Enter') runQuery(); });
+  $('lens').onchange = runQuery;
+})();
+
+// spin toggle
+function syncSpinBtn() { $('spinbtn').textContent = '⟲ spin: ' + (controls.autoRotate ? 'on' : 'off'); }
+$('spinbtn').onclick = () => { controls.autoRotate = !controls.autoRotate; syncSpinBtn(); };
+
+// ---- animate ---------------------------------------------------------------
+const clock = new THREE.Clock();
+let spawnStart = 0;
+const easeOut = (t) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
+
+  // core life
+  if (coreMesh) { coreMesh.rotation.y += dt * 0.25; coreMesh.rotation.x += dt * 0.09;
+    const s = 1 + Math.sin(t * 1.6) * 0.04; coreMesh.scale.setScalar(s); }
+  base.rotation.y += dt * 0.05;
+
+  // constellation spawn + hover
+  constellations.forEach((c) => {
+    const prog = easeOut((t - spawnStart - c.spawnDelay) / 0.7);
+    c.spawn += (prog - c.spawn) * 0.2;
+    const hoverS = 1 + c.hover * 0.28;
+    const dim = focused && c !== focused ? 0.72 : 1;
+    c.mesh.scale.setScalar(Math.max(0.001, c.spawn * hoverS * dim));
+    if (c.conn.material) {
+      const target = focused && c !== focused ? 0.18 : (c.data.strength === 'informational' ? 0.6 : 0.82);
+      c.conn.material.opacity += (target * c.spawn - c.conn.material.opacity) * 0.15;
+    }
+    c.mesh.rotation.y += dt * 0.4;
+
+    // leaves ease in/out
+    c.leaves.forEach((lf) => {
+      const u = lf.mesh.userData;
+      u.vis += (u.visTarget - u.vis) * 0.14;
+      const hs = 1 + u.hover * 0.4;
+      lf.mesh.scale.setScalar(Math.max(0.001, u.vis * hs));
+      if (lf.conn.material) lf.conn.material.opacity = u.vis * (lf.data.strength === 'informational' ? 0.55 : 0.7);
+      lf.lab.element.style.opacity = u.vis;
+      if (u.vis < 0.02 && u.visTarget === 0) { lf.mesh.visible = false; lf.conn.visible = false; lf.lab.visible = false; }
+    });
+  });
+
+  // camera fly
+  if (flyPos) {
+    camera.position.lerp(flyPos, 0.08); controls.target.lerp(flyTgt, 0.08);
+    if (camera.position.distanceTo(flyPos) < 0.4) { flyPos = null; flyTgt = null; }
+  }
+
+  controls.update();
+  composer.render();
+  labelRenderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  labelRenderer.setSize(innerWidth, innerHeight);
+});
+
+// ---- go --------------------------------------------------------------------
+syncSpinBtn();
+animate();
+runQuery();  // opens on the SpaceX reference plate
+window.__booted = true; if (window.__bootTimer) clearTimeout(window.__bootTimer);
+</script>
+</body>
+</html>
